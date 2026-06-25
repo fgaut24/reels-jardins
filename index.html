@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Générateur de Reels — Les Jardins en scène</title>
+<style>
+  :root{--ink:#2E1F16;--teal:#0B7A66;--coral:#EE4A26;--cream:#FFF4E4;--bd:#e3dccd;}
+  *{box-sizing:border-box;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;}
+  body{margin:0;background:var(--cream);color:var(--ink);line-height:1.5;}
+  .container{max-width:760px;margin:0 auto;padding:28px 20px 60px;}
+  h1{font-size:24px;margin:0 0 4px;} .lead{color:#6a5240;margin:0 0 22px;}
+  .card{background:#fff;border:1px solid var(--bd);border-radius:14px;padding:18px 18px 20px;margin-bottom:18px;}
+  .card h2{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--teal);margin:0 0 12px;}
+  label{display:block;font-size:12px;font-weight:700;color:#6a5240;margin:10px 0 4px;text-transform:uppercase;letter-spacing:.04em;}
+  input,textarea{width:100%;border:1px solid var(--bd);border-radius:9px;padding:9px 11px;font-size:14px;background:#fffdf8;}
+  textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;min-height:240px;resize:vertical;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;} .row>div{flex:1;min-width:150px;}
+  button{font-weight:700;border:none;border-radius:999px;cursor:pointer;padding:11px 18px;font-size:14px;}
+  .primary{background:var(--coral);color:#fff;} .primary:disabled{opacity:.5;cursor:default;}
+  .ghost{background:#efe7da;color:var(--ink);}
+  .note{font-size:12px;color:#8a7c66;margin-top:8px;}
+  .status{background:#16140f;color:#e8e0d0;border-radius:10px;padding:12px 14px;font-family:ui-monospace,monospace;font-size:13px;min-height:48px;white-space:pre-wrap;}
+  a{color:var(--teal);font-weight:700;} .dl{display:inline-block;margin-top:12px;background:var(--teal);color:#fff;padding:11px 18px;border-radius:999px;text-decoration:none;}
+  .warn{background:#fff3e8;border:1px solid #f3d3b6;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#8a5a2a;margin-top:10px;}
+  details summary{cursor:pointer;font-weight:700;color:var(--teal);font-size:13px;}
+  details{margin-top:8px;} details ol{margin:8px 0 0 18px;font-size:13px;}
+</style></head>
+<body><div class="container">
+  <h1>Générateur de Reels — Les Jardins en scène</h1>
+  <p class="lead">Déposez la configuration des soirées, lancez la génération, récupérez les vidéos.</p>
+
+  <div class="card">
+    <h2>1 · Connexion GitHub</h2>
+    <div class="row">
+      <div><label>Propriétaire (owner)</label><input id="owner" placeholder="votre-compte"></div>
+      <div><label>Dépôt (repo)</label><input id="repo" placeholder="reels-jardins"></div>
+      <div><label>Branche</label><input id="branch" value="main"></div>
+    </div>
+    <label>Jeton d'accès (token GitHub)</label>
+    <input id="token" type="password" placeholder="github_pat_…">
+    <div class="warn">Le jeton reste <b>uniquement dans votre navigateur</b> (stockage local). Utilisez un jeton « fine-grained » limité à ce seul dépôt, avec les permissions <b>Contents : lecture/écriture</b> et <b>Actions : lecture/écriture</b>. Ne partagez pas cette page avec le jeton enregistré.</div>
+    <details><summary>Comment créer le jeton (pas à pas)</summary><ol>
+      <li>GitHub → votre photo → <b>Settings</b>.</li>
+      <li><b>Developer settings</b> → <b>Personal access tokens</b> → <b>Fine-grained tokens</b> → <b>Generate new token</b>.</li>
+      <li><b>Repository access</b> → <b>Only select repositories</b> → choisissez votre dépôt.</li>
+      <li><b>Repository permissions</b> : <b>Contents</b> = Read and write ; <b>Actions</b> = Read and write (Metadata se met seul).</li>
+      <li><b>Generate token</b>, copiez-le, collez-le ci-dessus.</li>
+    </ol></details>
+    <div style="margin-top:12px"><button class="ghost" onclick="saveCfg()">Mémoriser dans ce navigateur</button></div>
+  </div>
+
+  <div class="card">
+    <h2>2 · Configuration des soirées</h2>
+    <p class="note">Déposez un fichier <code>soirees.json</code> ou modifiez directement ci-dessous.</p>
+    <input id="file" type="file" accept=".json,application/json" onchange="loadFile(event)" style="padding:7px">
+    <label>Contenu de soirees.json</label>
+    <textarea id="json" spellcheck="false"></textarea>
+    <div class="note">Astuce : pour prévisualiser l'affiche animée avant de générer, utilisez l'application « Générateur de Reels » fournie séparément.</div>
+  </div>
+
+  <div class="card">
+    <h2>3 · Lancer et récupérer</h2>
+    <button class="primary" id="go" onclick="run()">Déposer la configuration et générer</button>
+    <div class="status" id="status" style="margin-top:14px">En attente…</div>
+    <div id="result"></div>
+  </div>
+</div>
+
+<script>
+const DEFAULT_JSON = `{
+  "fps": 30,
+  "duration": 8,
+  "scale": 2,
+  "common": {
+    "eyebrow": "Été 2026 · Terrasson-Lavilledieu",
+    "t1": "Les Jardins",
+    "hl": "en scène",
+    "sub": "Jardins de l'Imaginaire · dès 20h · plein air",
+    "tarifs": "Adultes <b>8,50&nbsp;€</b> · −18 ans &amp; étudiants <b>5,50&nbsp;€</b> · −10 ans <b>gratuit</b>",
+    "cta": "jardins-imaginaire.com",
+    "resv": "Réservation obligatoire",
+    "mail": "imaginaire@ville-terrasson.com"
+  },
+  "soirees": [
+    { "out": "reel_21_juillet.mp4", "day": "21", "mo": "juillet", "a1": "Les Dandys Manchots", "a2": "Les Chocoplatines", "gen": "rock-swing · groove &amp; vinyles vintage", "accent": "#EE4A26", "discink": "#fff" },
+    { "out": "reel_28_juillet.mp4", "day": "28", "mo": "juillet", "a1": "DJ Laurent David", "a2": "Café Gazoil", "gen": "électro · DJ set festif", "accent": "#FBA819", "discink": "#2E1F16" },
+    { "out": "reel_13_aout.mp4", "day": "13", "mo": "août", "a1": "DJ Silx", "a2": "Mandrake", "gen": "bass music · live électro-rock", "accent": "#0E9E84", "discink": "#fff" }
+  ]
+}`;
+
+const $ = id => document.getElementById(id);
+function saveCfg(){ ["owner","repo","branch","token"].forEach(k=>localStorage.setItem("rg_"+k,$(k).value)); log("Réglages mémorisés."); }
+function loadCfg(){ ["owner","repo","branch","token"].forEach(k=>{const v=localStorage.getItem("rg_"+k); if(v)$(k).value=v;}); if(!$("branch").value)$("branch").value="main"; }
+function loadFile(e){ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{$("json").value=r.result; log("Fichier chargé.");}; r.readAsText(f); }
+function log(m){ $("status").textContent = m; }
+function b64(str){ return btoa(unescape(encodeURIComponent(str))); }
+function headers(){ return { "Authorization":"Bearer "+$("token").value.trim(), "Accept":"application/vnd.github+json", "X-GitHub-Api-Version":"2022-11-28" }; }
+function api(){ return `https://api.github.com/repos/${$("owner").value.trim()}/${$("repo").value.trim()}`; }
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+async function run(){
+  $("result").innerHTML=""; $("go").disabled=true;
+  try{
+    const owner=$("owner").value.trim(), repo=$("repo").value.trim(), branch=$("branch").value.trim()||"main", token=$("token").value.trim();
+    if(!owner||!repo||!token){ log("Renseignez owner, repo et token."); $("go").disabled=false; return; }
+    let cfgText=$("json").value;
+    try{ JSON.parse(cfgText); }catch(e){ log("⚠ JSON invalide : "+e.message); $("go").disabled=false; return; }
+
+    log("Dépôt de soirees.json…");
+    // SHA actuel (s'il existe)
+    let sha=null;
+    const getRes=await fetch(`${api()}/contents/soirees.json?ref=${branch}`,{headers:headers()});
+    if(getRes.status===200){ sha=(await getRes.json()).sha; }
+    else if(getRes.status!==404){ throw new Error("Lecture du fichier : "+getRes.status+" "+getRes.statusText); }
+
+    // Commit (déclenche le workflow)
+    const putRes=await fetch(`${api()}/contents/soirees.json`,{method:"PUT",headers:headers(),body:JSON.stringify({
+      message:"Mise à jour soirees.json via la page web",
+      content:b64(cfgText), branch, ...(sha?{sha}:{})
+    })});
+    if(!putRes.ok){ throw new Error("Dépôt : "+putRes.status+" "+(await putRes.text()).slice(0,200)); }
+    const commitSha=(await putRes.json()).commit.sha;
+    log("Configuration déposée. Recherche de l'exécution…");
+
+    // Trouver le run correspondant à ce commit
+    let run=null;
+    for(let i=0;i<20 && !run;i++){
+      await sleep(3000);
+      const r=await fetch(`${api()}/actions/runs?per_page=10&branch=${branch}`,{headers:headers()});
+      if(r.ok){ const runs=(await r.json()).workflow_runs||[]; run=runs.find(x=>x.head_sha===commitSha); }
+      log("Lancement de la génération… ("+((i+1)*3)+"s)");
+    }
+    if(!run){ throw new Error("Exécution introuvable. Vérifiez que le workflow existe et est activé."); }
+
+    // Suivre jusqu'à la fin
+    while(run.status!=="completed"){
+      log("Génération en cours… ("+run.status+")  Voir : "+run.html_url);
+      await sleep(5000);
+      const r=await fetch(`${api()}/actions/runs/${run.id}`,{headers:headers()});
+      run=await r.json();
+    }
+
+    if(run.conclusion!=="success"){ throw new Error("Échec de la génération ("+run.conclusion+"). Détails : "+run.html_url); }
+
+    log("✅ Vidéos générées avec succès.");
+    // Lien de récupération (artefacts)
+    let dl=run.html_url;
+    const ar=await fetch(`${api()}/actions/runs/${run.id}/artifacts`,{headers:headers()});
+    if(ar.ok){ const arts=(await ar.json()).artifacts||[]; if(arts.length){ /* le téléchargement direct du binaire se fait depuis la page GitHub */ } }
+    $("result").innerHTML = `<a class="dl" href="${run.html_url}" target="_blank" rel="noopener">⬇ Récupérer les vidéos sur GitHub</a>`+
+      `<p class="note">Ouvrez le lien, puis téléchargez l'artefact « reels-jardins-en-scene » (section « Artifacts » en bas de la page d'exécution).</p>`;
+  }catch(e){ log("Erreur : "+e.message); }
+  finally{ $("go").disabled=false; }
+}
+
+loadCfg();
+$("json").value = localStorage.getItem("rg_json") || DEFAULT_JSON;
+$("json").addEventListener("input", ()=>localStorage.setItem("rg_json",$("json").value));
+</script>
+</body></html>

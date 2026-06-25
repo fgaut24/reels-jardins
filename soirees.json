@@ -1,0 +1,38 @@
+{
+  "fps": 30,
+  "duration": 8,
+  "scale": 2,
+  "common": {
+    "eyebrow": "Été 2026 · Terrasson-Lavilledieu",
+    "t1": "Les Jardins",
+    "hl": "en scène",
+    "sub": "Jardins de l'Imaginaire · dès 20h · plein air",
+    "tarifs": "Adultes <b>8,50&nbsp;€</b> · −18 ans &amp; étudiants <b>5,50&nbsp;€</b> · −10 ans <b>gratuit</b>",
+    "cta": "jardins-imaginaire.com",
+    "resv": "Réservation obligatoire",
+    "mail": "imaginaire@ville-terrasson.com"
+  },
+  "soirees": [
+    {
+      "out": "reel_21_juillet.mp4",
+      "day": "21", "mo": "juillet",
+      "a1": "Les Dandys Manchots", "a2": "Les Chocoplatines",
+      "gen": "rock-swing · groove &amp; vinyles vintage",
+      "accent": "#EE4A26", "discink": "#fff"
+    },
+    {
+      "out": "reel_28_juillet.mp4",
+      "day": "28", "mo": "juillet",
+      "a1": "DJ Laurent David", "a2": "Café Gazoil",
+      "gen": "électro · DJ set festif",
+      "accent": "#FBA819", "discink": "#2E1F16"
+    },
+    {
+      "out": "reel_13_aout.mp4",
+      "day": "13", "mo": "août",
+      "a1": "DJ Silx", "a2": "Mandrake",
+      "gen": "bass music · live électro-rock",
+      "accent": "#0E9E84", "discink": "#fff"
+    }
+  ]
+}

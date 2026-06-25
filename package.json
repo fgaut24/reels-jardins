@@ -1,0 +1,12 @@
+{
+  "name": "reels-generator-jardins",
+  "version": "1.0.0",
+  "description": "Génère des Reels MP4 9:16 pour Les Jardins en scène (rendu HTML/CSS via Puppeteer + ffmpeg).",
+  "private": true,
+  "scripts": {
+    "generate": "node generate.js"
+  },
+  "dependencies": {
+    "puppeteer": "^22.0.0"
+  }
+}
