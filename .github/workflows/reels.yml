@@ -1,0 +1,53 @@
+# .github/workflows/reels.yml
+# Génère les Reels MP4 et les publie en artefacts téléchargeables.
+# Hypothèse : les fichiers du générateur (generate.js, template.html, soirees.json,
+# package.json) sont à la RACINE du dépôt, et ce fichier dans .github/workflows/.
+# Si vous les gardez dans un sous-dossier, ajustez "working-directory" et "paths" ci-dessous.
+
+name: Générer les Reels
+
+on:
+  push:
+    paths:
+      - "soirees.json"
+      - "template.html"
+      - "generate.js"
+      - "package.json"
+  workflow_dispatch: {}   # bouton « Run workflow » dans l'onglet Actions
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Installer ffmpeg et les dépendances de Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ffmpeg \
+            libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+            libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+            libgbm1 libpango-1.0-0 libcairo2 libasound2 libatspi2.0-0 \
+            fonts-liberation
+
+      - name: Installer les dépendances (Puppeteer + Chromium)
+        run: npm install
+
+      - name: Générer les vidéos
+        run: node generate.js
+
+      - name: Publier les MP4 en artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: reels-jardins-en-scene
+          path: out/*.mp4
+          if-no-files-found: error
+          retention-days: 30
