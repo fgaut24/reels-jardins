@@ -9,16 +9,17 @@ Ce module assemble, pour chaque soirée : une **carte d'intro animée**, puis **
 
 ## Mode d'emploi
 
-1. Créez un dossier **`videos/`** dans le dépôt et déposez-y vos clips, par exemple :
-   `videos/groupe_21.mp4`, `videos/groupe_28.mp4`, `videos/groupe_13.mp4`.
-2. Dans `soirees.json`, chaque soirée a un champ **`"video"`** qui pointe vers son clip
-   (déjà pré-rempli avec ces noms). Adaptez si vos fichiers ont d'autres noms.
+1. Créez un dossier **`videos/`** dans le dépôt et déposez-y vos clips. Chaque soirée a **deux groupes**, donc deux clips, par exemple :
+   `videos/groupe_21_1.mp4` et `videos/groupe_21_2.mp4` (idem pour 28 et 13).
+2. Dans `soirees.json`, chaque soirée a un champ **`"videos"`** = une **liste** de clips, dans l'ordre d'apparition
+   (le premier groupe, puis le second). Adaptez les noms à vos fichiers.
 3. Réglez si besoin **`introDuration`** et **`outroDuration`** (en secondes) en haut de `soirees.json`.
 4. Lancez l'Action **« Générer les Reels (vidéo) »** (onglet Actions → Run workflow),
    ou en local : `node assemble.js`.
-5. Récupérez l'artefact **`reels-jardins-video`** : un MP4 par soirée.
+5. Récupérez l'artefact **`reels-jardins-video`** : un MP4 par soirée
+   (intro → vidéo groupe 1 → vidéo groupe 2 → carton « Réserver »).
 
-Seules les soirées dont la vidéo **existe réellement** sont traitées ; les autres sont ignorées.
+Seules les soirées dont **au moins une** vidéo existe sont traitées ; vous pouvez donc tester avec un seul clip.
 
 ## En local
 Prérequis : Node 18+, `npm install`, et **ffmpeg + ffprobe** installés (`brew install ffmpeg`).
