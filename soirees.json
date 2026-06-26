@@ -17,7 +17,7 @@
   "soirees": [
     {
       "out": "reel_21_juillet.mp4",
-      "video": "videos/groupe_21.mp4",
+      "videos": ["videos/groupe_21_1.mp4", "videos/groupe_21_2.mp4"],
       "day": "21", "mo": "juillet",
       "a1": "Les Dandys Manchots", "a2": "Les Chocoplatines",
       "gen": "rock-swing · groove &amp; vinyles vintage",
@@ -25,7 +25,7 @@
     },
     {
       "out": "reel_28_juillet.mp4",
-      "video": "videos/groupe_28.mp4",
+      "videos": ["videos/groupe_28_1.mp4", "videos/groupe_28_2.mp4"],
       "day": "28", "mo": "juillet",
       "a1": "DJ Laurent David", "a2": "Café Gazoil",
       "gen": "électro · DJ set festif",
@@ -33,7 +33,7 @@
     },
     {
       "out": "reel_13_aout.mp4",
-      "video": "videos/groupe_13.mp4",
+      "videos": ["videos/groupe_13_1.mp4", "videos/groupe_13_2.mp4"],
       "day": "13", "mo": "août",
       "a1": "DJ Silx", "a2": "Mandrake",
       "gen": "bass music · live électro-rock",
