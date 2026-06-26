@@ -1,8 +1,7 @@
-// assemble.js — Reel = carte d'intro animée + VOTRE vidéo (avec son) + carton « Réserver »
+// assemble.js — Reel = carte d'intro animée + VOS vidéos (avec son) + carton « Réserver »
+// Chaque soirée peut avoir PLUSIEURS vidéos (un clip par groupe), enchaînées dans l'ordre.
 // Usage : node assemble.js
 // Prérequis : Node 18+, `npm install`, ffmpeg ET ffprobe installés.
-// Chaque soirée de soirees.json qui possède un champ "video" pointant vers un fichier
-// existant produit un Reel ; les autres sont ignorées (gérées par generate.js).
 
 const fs = require("fs");
 const path = require("path");
@@ -22,8 +21,17 @@ function hasAudio(file){
     return out.includes("audio");
   }catch(e){ return false; }
 }
+// Récupère la liste des vidéos d'une soirée (champ "videos" en tableau, ou "video" unique)
+function videoList(s){
+  if(Array.isArray(s.videos)) return s.videos;
+  if(s.video) return [s.video];
+  return [];
+}
+function existingVideos(s){
+  return videoList(s).map(v => path.join(ROOT, v)).filter(p => fs.existsSync(p));
+}
 
-async function renderCard(page, mode, frames, fps, scale, tmpDir){
+async function renderCard(page, mode, frames, fps, tmpDir){
   await page.evaluate((m)=>window.setMode(m), mode);
   await page.evaluate((m)=>window.startCapture(m), mode);
   for(let i=0;i<frames;i++){
@@ -32,14 +40,12 @@ async function renderCard(page, mode, frames, fps, scale, tmpDir){
     await page.screenshot({ path: path.join(tmpDir, `f${String(i).padStart(4,"0")}.png`) });
   }
 }
-
 function framesToMp4Silent(tmpDir, fps, outFile){
   ff(["-y","-framerate",String(fps),"-i",path.join(tmpDir,"f%04d.png"),
       "-f","lavfi","-i","anullsrc=channel_layout=stereo:sample_rate=48000",
       "-vf","scale=1080:1920:flags=lanczos","-r",String(fps),
       "-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-shortest", outFile]);
 }
-
 function normalizeVideo(videoPath, fps, outFile){
   const vf = "scale=1080:1920:force_original_aspect_ratio=decrease,"+
              "pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps="+fps+",format=yuv420p,setsar=1";
@@ -61,9 +67,9 @@ function normalizeVideo(videoPath, fps, outFile){
   const outroDur = cfg.outroDuration || 3;
   if(!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR,{recursive:true});
 
-  const todo = cfg.soirees.filter(s => s.video && fs.existsSync(path.join(ROOT, s.video)));
+  const todo = cfg.soirees.filter(s => existingVideos(s).length > 0);
   if(!todo.length){
-    console.log("Aucune soirée avec une vidéo existante. Ajoutez un champ \"video\" pointant vers un fichier (ex. videos/groupe_21.mp4).");
+    console.log("Aucune soirée avec des vidéos existantes. Déposez vos clips dans videos/ et renseignez \"videos\": [\"videos/...\", \"videos/...\"] dans soirees.json.");
     return;
   }
 
@@ -72,8 +78,8 @@ function normalizeVideo(videoPath, fps, outFile){
     for(const s of todo){
       const data = Object.assign({}, cfg.common, s);
       const out = path.join(OUT_DIR, s.out || `reel_${s.day}.mp4`);
-      const videoPath = path.join(ROOT, s.video);
-      console.log(`\n▶ ${path.basename(out)}  (intro ${introDur}s + vidéo + outro ${outroDur}s)`);
+      const vids = existingVideos(s);
+      console.log(`\n▶ ${path.basename(out)}  (intro + ${vids.length} vidéo(s) + outro)`);
 
       const page = await browser.newPage();
       await page.setViewport({ width:1080, height:1920, deviceScaleFactor:scale });
@@ -87,22 +93,29 @@ function normalizeVideo(videoPath, fps, outFile){
       const outroFrames = path.join(work,"outro"); fs.mkdirSync(outroFrames);
 
       console.log("  • intro…");
-      await renderCard(page, "intro", Math.round(fps*introDur), fps, scale, introFrames);
+      await renderCard(page, "intro", Math.round(fps*introDur), fps, introFrames);
       console.log("  • outro…");
-      await renderCard(page, "outro", Math.round(fps*outroDur), fps, scale, outroFrames);
+      await renderCard(page, "outro", Math.round(fps*outroDur), fps, outroFrames);
       await page.close();
 
       const introMp4 = path.join(work,"intro.mp4");
       const outroMp4 = path.join(work,"outro.mp4");
-      const midMp4   = path.join(work,"mid.mp4");
       framesToMp4Silent(introFrames, fps, introMp4);
       framesToMp4Silent(outroFrames, fps, outroMp4);
-      console.log("  • normalisation de la vidéo…");
-      normalizeVideo(videoPath, fps, midMp4);
 
-      // Concaténation intro + vidéo + outro
+      // Normalise chaque vidéo dans l'ordre
+      const mids = [];
+      vids.forEach((v, i) => {
+        const mid = path.join(work, `mid_${i}.mp4`);
+        console.log(`  • normalisation vidéo ${i+1}/${vids.length} (${path.basename(v)})…`);
+        normalizeVideo(v, fps, mid);
+        mids.push(mid);
+      });
+
+      // Concaténation : intro + vidéos… + outro
       const list = path.join(work,"list.txt");
-      fs.writeFileSync(list, `file '${introMp4}'\nfile '${midMp4}'\nfile '${outroMp4}'\n`);
+      const lines = [introMp4, ...mids, outroMp4].map(f => `file '${f}'`).join("\n") + "\n";
+      fs.writeFileSync(list, lines);
       console.log("  • assemblage final…");
       ff(["-y","-f","concat","-safe","0","-i",list,
           "-c:v","libx264","-pix_fmt","yuv420p","-crf","18",
