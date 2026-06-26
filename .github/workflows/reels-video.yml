@@ -1,0 +1,52 @@
+# .github/workflows/reels-video.yml
+# Assemble : carte d'intro animée + VOTRE vidéo (avec son) + carton « Réserver ».
+# Déposez vos vidéos dans le dossier videos/ et référencez-les dans soirees.json (champ "video").
+# Déclenchement manuel (bouton « Run workflow ») ou à chaque ajout de vidéo / modif des scripts.
+
+name: Générer les Reels (vidéo)
+
+on:
+  workflow_dispatch: {}
+  push:
+    paths:
+      - "videos/**"
+      - "assemble.js"
+      - "card.html"
+      - "soirees.json"
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Installer ffmpeg et les dépendances de Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ffmpeg \
+            libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+            libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+            libgbm1 libpango-1.0-0 libcairo2 libasound2 libatspi2.0-0 \
+            fonts-liberation
+
+      - name: Installer les dépendances (Puppeteer + Chromium)
+        run: npm install
+
+      - name: Assembler les vidéos
+        run: node assemble.js
+
+      - name: Publier les MP4 en artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: reels-jardins-video
+          path: out/*.mp4
+          if-no-files-found: error
+          retention-days: 30
