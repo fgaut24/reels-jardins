@@ -82,7 +82,6 @@ function buildSegment(videoPath, labelPng, fps, outFile){
     for(const s of todo){
       const data = Object.assign({}, cfg.common, s);
       const out = path.join(OUT_DIR, s.out || `reel_${s.day}.mp4`);
-      // garde l'ordre des vidéos déclarées, en ne conservant que celles présentes
       const decl = videoList(s);
       const items = decl.map((v,i)=>({ file: path.join(ROOT,v), label: labelFor(s,i) }))
                         .filter(it => fs.existsSync(it.file));
@@ -104,7 +103,6 @@ function buildSegment(videoPath, labelPng, fps, outFile){
       console.log("  • outro…");
       await renderCardFrames(page, "outro", Math.round(fps*outroDur), fps, outroFrames);
 
-      // un PNG de bandeau par vidéo
       for(let i=0;i<items.length;i++){
         items[i].png = path.join(work, `label_${i}.png`);
         await renderLabelPng(page, items[i].label, items[i].png);
