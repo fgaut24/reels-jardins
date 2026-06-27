@@ -5,6 +5,7 @@
   "outroDuration": 4,
   "scale": 2,
   "common": {
+    "clipSeconds": 10,
     "eyebrow": "Été 2026 · Terrasson-Lavilledieu",
     "t1": "Les Jardins",
     "hl": "en scène",
@@ -18,6 +19,7 @@
     {
       "out": "reel_21_juillet.mp4",
       "videos": ["videos/groupe_21_1.mp4", "videos/groupe_21_2.mp4"],
+      "starts": [0, 0],
       "day": "21", "mo": "juillet",
       "a1": "Les Dandys Manchots", "a2": "Les Chocoplatines",
       "gen": "rock-swing · groove &amp; vinyles vintage",
