@@ -61,10 +61,14 @@ function detectBars(videoPath){
   let h = bot - y; h -= h%2;
   return { y, h };
 }
-function framesToMp4Silent(tmpDir, fps, outFile){
+function framesToMp4Silent(tmpDir, fps, outFile, durSec){
+  const f = 0.4;
+  const fade = durSec && durSec>2*f
+    ? ",fade=t=in:st=0:d="+f+",fade=t=out:st="+(durSec-f).toFixed(2)+":d="+f
+    : "";
   ff(["-y","-framerate",String(fps),"-i",path.join(tmpDir,"f%04d.png"),
       "-f","lavfi","-i","anullsrc=channel_layout=stereo:sample_rate=48000",
-      "-vf","scale=1080:1920:flags=lanczos","-r",String(fps),
+      "-vf","scale=1080:1920:flags=lanczos"+fade,"-r",String(fps),
       "-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-shortest", outFile]);
 }
 // Vidéo -> 1080x1920 avec fond flou + nom du groupe incrusté en bas
@@ -78,22 +82,27 @@ function buildSegment(videoPath, labelPng, fps, outFile, start, dur){
   const trim = [];                                   // limite la portion de clip utilisée
   if(start && start>0) trim.push("-ss", String(start));
   if(dur && dur>0)     trim.push("-t",  String(dur));
+  const f = 0.4;                                      // durée des fondus
+  const fo = Math.max(0, (dur||10) - f).toFixed(2);   // début du fondu sortant
+  const vfade = ",fade=t=in:st=0:d="+f+",fade=t=out:st="+fo+":d="+f;
+  const afIn  = "afade=t=in:st=0:d="+f+",afade=t=out:st="+fo+":d="+f;
   const vf =
     "[0:v]"+pre+"split=2[bg][fg];"+
     "[bg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=24:1,eq=brightness=-0.06,setsar=1[bgb];"+
     "[fg]scale=1080:1920:force_original_aspect_ratio=decrease,setsar=1[fgs];"+
     "[bgb][fgs]overlay=(W-w)/2:(H-h)/2[base];"+
     "[base][1:v]overlay=0:0[ov];"+
-    "[ov]fps="+fps+",format=yuv420p,setsar=1[outv]";
+    "[ov]fps="+fps+",format=yuv420p,setsar=1"+vfade+"[outv]";
   if(hasAudio(videoPath)){
+    const af = "loudnorm=I=-16:TP=-1.5:LRA=11,"+afIn;   // harmonise le niveau sonore entre clips
     ff(["-y",...trim,"-i",videoPath,"-loop","1","-i",labelPng,"-filter_complex",vf,
-        "-map","[outv]","-map","0:a","-c:v","libx264","-pix_fmt","yuv420p",
-        "-c:a","aac","-ar","48000","-ac","2","-shortest", outFile]);
+        "-map","[outv]","-map","0:a","-af",af,"-c:v","libx264","-pix_fmt","yuv420p",
+        "-c:a","aac","-ar","48000","-ac","2","-t",String(dur||10), outFile]);
   }else{
     ff(["-y",...trim,"-i",videoPath,"-loop","1","-i",labelPng,
         "-f","lavfi","-i","anullsrc=channel_layout=stereo:sample_rate=48000",
         "-filter_complex",vf,"-map","[outv]","-map","2:a",
-        "-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-shortest", outFile]);
+        "-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-t",String(dur||10), outFile]);
   }
 }
 
@@ -144,8 +153,8 @@ function buildSegment(videoPath, labelPng, fps, outFile, start, dur){
 
       const introMp4 = path.join(work,"intro.mp4");
       const outroMp4 = path.join(work,"outro.mp4");
-      framesToMp4Silent(introFrames, fps, introMp4);
-      framesToMp4Silent(outroFrames, fps, outroMp4);
+      framesToMp4Silent(introFrames, fps, introMp4, introDur);
+      framesToMp4Silent(outroFrames, fps, outroMp4, outroDur);
 
       const clipSeconds = data.clipSeconds || 10;        // durée utilisée par clip
       const starts = Array.isArray(s.starts) ? s.starts : [];
