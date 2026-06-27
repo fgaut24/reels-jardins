@@ -68,13 +68,16 @@ function framesToMp4Silent(tmpDir, fps, outFile){
       "-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-shortest", outFile]);
 }
 // Vidéo -> 1080x1920 avec fond flou + nom du groupe incrusté en bas
-function buildSegment(videoPath, labelPng, fps, outFile){
+function buildSegment(videoPath, labelPng, fps, outFile, start, dur){
   const { w:iw, h:ih } = probeSize(videoPath);
   let pre = "";
   const bars = detectBars(videoPath);
   if(bars && iw>0 && ih>0 && bars.h>0 && bars.h < ih*0.97){
     pre = "crop="+iw+":"+bars.h+":0:"+bars.y+",";   // retire les bandes noires haut/bas
   }
+  const trim = [];                                   // limite la portion de clip utilisée
+  if(start && start>0) trim.push("-ss", String(start));
+  if(dur && dur>0)     trim.push("-t",  String(dur));
   const vf =
     "[0:v]"+pre+"split=2[bg][fg];"+
     "[bg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=24:1,eq=brightness=-0.06,setsar=1[bgb];"+
@@ -83,11 +86,11 @@ function buildSegment(videoPath, labelPng, fps, outFile){
     "[base][1:v]overlay=0:0[ov];"+
     "[ov]fps="+fps+",format=yuv420p,setsar=1[outv]";
   if(hasAudio(videoPath)){
-    ff(["-y","-i",videoPath,"-loop","1","-i",labelPng,"-filter_complex",vf,
+    ff(["-y",...trim,"-i",videoPath,"-loop","1","-i",labelPng,"-filter_complex",vf,
         "-map","[outv]","-map","0:a","-c:v","libx264","-pix_fmt","yuv420p",
         "-c:a","aac","-ar","48000","-ac","2","-shortest", outFile]);
   }else{
-    ff(["-y","-i",videoPath,"-loop","1","-i",labelPng,
+    ff(["-y",...trim,"-i",videoPath,"-loop","1","-i",labelPng,
         "-f","lavfi","-i","anullsrc=channel_layout=stereo:sample_rate=48000",
         "-filter_complex",vf,"-map","[outv]","-map","2:a",
         "-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-shortest", outFile]);
@@ -144,11 +147,14 @@ function buildSegment(videoPath, labelPng, fps, outFile){
       framesToMp4Silent(introFrames, fps, introMp4);
       framesToMp4Silent(outroFrames, fps, outroMp4);
 
+      const clipSeconds = data.clipSeconds || 10;        // durée utilisée par clip
+      const starts = Array.isArray(s.starts) ? s.starts : [];
       const mids = [];
       items.forEach((it, i) => {
         const mid = path.join(work, `mid_${i}.mp4`);
-        console.log(`  • vidéo ${i+1}/${items.length} (${path.basename(it.file)}) — « ${it.label} »…`);
-        buildSegment(it.file, it.png, fps, mid);
+        const start = starts[i] || 0;
+        console.log(`  • vidéo ${i+1}/${items.length} (${path.basename(it.file)}) — « ${it.label} » [${start}s → +${clipSeconds}s]…`);
+        buildSegment(it.file, it.png, fps, mid, start, clipSeconds);
         mids.push(mid);
       });
 
