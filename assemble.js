@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { execFileSync } = require("child_process");
+const { execFileSync, spawnSync } = require("child_process");
 const puppeteer = require("puppeteer");
 
 const ROOT = __dirname;
@@ -36,8 +36,30 @@ async function renderCardFrames(page, mode, frames, fps, tmpDir){
   }
 }
 async function renderLabelPng(page, text, outPng){
+  await page.setViewport({ width:1080, height:1920, deviceScaleFactor:1 });
   await page.evaluate((t)=>{ window.setMode('label'); window.setLabel(t); }, text);
   await page.screenshot({ path: outPng, omitBackground: true });
+}
+function probeSize(file){
+  try{
+    const out = execFileSync("ffprobe", ["-v","error","-select_streams","v:0",
+      "-show_entries","stream=width,height","-of","csv=p=0:s=x", file]).toString().trim();
+    const [w,h] = out.split("x").map(Number);
+    return { w, h };
+  }catch(e){ return { w:0, h:0 }; }
+}
+// Détecte des bandes noires haut/bas et renvoie la bande de contenu {y,h} en pleine largeur (ou null).
+function detectBars(videoPath){
+  const r = spawnSync("ffmpeg", ["-hide_banner","-ss","0.5","-i",videoPath,
+    "-vf","cropdetect=limit=24:round=2","-t","5","-f","null","-"], { encoding:"utf8" });
+  const out = (r.stderr||"") + (r.stdout||"");
+  const ms = [...out.matchAll(/crop=\d+:(\d+):\d+:(\d+)/g)];
+  if(!ms.length) return null;
+  let top = Infinity, bot = -Infinity;
+  for(const m of ms){ const h=+m[1], y=+m[2]; if(y<top) top=y; if(y+h>bot) bot=y+h; }
+  let y = top - (top%2); if(y<0) y=0;
+  let h = bot - y; h -= h%2;
+  return { y, h };
 }
 function framesToMp4Silent(tmpDir, fps, outFile){
   ff(["-y","-framerate",String(fps),"-i",path.join(tmpDir,"f%04d.png"),
@@ -47,8 +69,14 @@ function framesToMp4Silent(tmpDir, fps, outFile){
 }
 // Vidéo -> 1080x1920 avec fond flou + nom du groupe incrusté en bas
 function buildSegment(videoPath, labelPng, fps, outFile){
+  const { w:iw, h:ih } = probeSize(videoPath);
+  let pre = "";
+  const bars = detectBars(videoPath);
+  if(bars && iw>0 && ih>0 && bars.h>0 && bars.h < ih*0.97){
+    pre = "crop="+iw+":"+bars.h+":0:"+bars.y+",";   // retire les bandes noires haut/bas
+  }
   const vf =
-    "[0:v]split=2[bg][fg];"+
+    "[0:v]"+pre+"split=2[bg][fg];"+
     "[bg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=24:1,eq=brightness=-0.06,setsar=1[bgb];"+
     "[fg]scale=1080:1920:force_original_aspect_ratio=decrease,setsar=1[fgs];"+
     "[bgb][fgs]overlay=(W-w)/2:(H-h)/2[base];"+
@@ -82,6 +110,7 @@ function buildSegment(videoPath, labelPng, fps, outFile){
     for(const s of todo){
       const data = Object.assign({}, cfg.common, s);
       const out = path.join(OUT_DIR, s.out || `reel_${s.day}.mp4`);
+      // garde l'ordre des vidéos déclarées, en ne conservant que celles présentes
       const decl = videoList(s);
       const items = decl.map((v,i)=>({ file: path.join(ROOT,v), label: labelFor(s,i) }))
                         .filter(it => fs.existsSync(it.file));
@@ -103,6 +132,7 @@ function buildSegment(videoPath, labelPng, fps, outFile){
       console.log("  • outro…");
       await renderCardFrames(page, "outro", Math.round(fps*outroDur), fps, outroFrames);
 
+      // un PNG de bandeau par vidéo
       for(let i=0;i<items.length;i++){
         items[i].png = path.join(work, `label_${i}.png`);
         await renderLabelPng(page, items[i].label, items[i].png);
