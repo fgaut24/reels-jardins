@@ -1,7 +1,6 @@
-// assemble.js — Reel = carte d'intro animée + VOS vidéos (avec son) + carton « Réserver »
-// Chaque soirée peut avoir PLUSIEURS vidéos (un clip par groupe), enchaînées dans l'ordre.
-// Usage : node assemble.js
-// Prérequis : Node 18+, `npm install`, ffmpeg ET ffprobe installés.
+// assemble.js — Reel = intro animée + VOS vidéos (fond flou + nom du groupe) + carton « Réserver »
+// Chaque vidéo est remplie en 9:16 par un fond flou, et porte en bas le nom du groupe.
+// Usage : node assemble.js   |   Prérequis : Node 18+, `npm install`, ffmpeg + ffprobe.
 
 const fs = require("fs");
 const path = require("path");
@@ -21,24 +20,24 @@ function hasAudio(file){
     return out.includes("audio");
   }catch(e){ return false; }
 }
-// Récupère la liste des vidéos d'une soirée (champ "videos" en tableau, ou "video" unique)
-function videoList(s){
-  if(Array.isArray(s.videos)) return s.videos;
-  if(s.video) return [s.video];
-  return [];
-}
-function existingVideos(s){
-  return videoList(s).map(v => path.join(ROOT, v)).filter(p => fs.existsSync(p));
+function videoList(s){ if(Array.isArray(s.videos)) return s.videos; if(s.video) return [s.video]; return []; }
+function existingVideos(s){ return videoList(s).map(v => path.join(ROOT, v)).filter(p => fs.existsSync(p)); }
+function labelFor(s, i){
+  if(Array.isArray(s.labels) && s.labels[i] != null) return s.labels[i];
+  return [s.a1, s.a2, s.a3][i] || "";
 }
 
-async function renderCard(page, mode, frames, fps, tmpDir){
+async function renderCardFrames(page, mode, frames, fps, tmpDir){
   await page.evaluate((m)=>window.setMode(m), mode);
   await page.evaluate((m)=>window.startCapture(m), mode);
   for(let i=0;i<frames;i++){
-    const t=(i/fps)*1000;
-    await page.evaluate((t)=>window.seek(t), t);
+    await page.evaluate((t)=>window.seek(t), (i/fps)*1000);
     await page.screenshot({ path: path.join(tmpDir, `f${String(i).padStart(4,"0")}.png`) });
   }
+}
+async function renderLabelPng(page, text, outPng){
+  await page.evaluate((t)=>{ window.setMode('label'); window.setLabel(t); }, text);
+  await page.screenshot({ path: outPng, omitBackground: true });
 }
 function framesToMp4Silent(tmpDir, fps, outFile){
   ff(["-y","-framerate",String(fps),"-i",path.join(tmpDir,"f%04d.png"),
@@ -46,16 +45,24 @@ function framesToMp4Silent(tmpDir, fps, outFile){
       "-vf","scale=1080:1920:flags=lanczos","-r",String(fps),
       "-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-shortest", outFile]);
 }
-function normalizeVideo(videoPath, fps, outFile){
-  const vf = "scale=1080:1920:force_original_aspect_ratio=decrease,"+
-             "pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps="+fps+",format=yuv420p,setsar=1";
+// Vidéo -> 1080x1920 avec fond flou + nom du groupe incrusté en bas
+function buildSegment(videoPath, labelPng, fps, outFile){
+  const vf =
+    "[0:v]split=2[bg][fg];"+
+    "[bg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=24:1,eq=brightness=-0.06,setsar=1[bgb];"+
+    "[fg]scale=1080:1920:force_original_aspect_ratio=decrease,setsar=1[fgs];"+
+    "[bgb][fgs]overlay=(W-w)/2:(H-h)/2[base];"+
+    "[base][1:v]overlay=0:0[ov];"+
+    "[ov]fps="+fps+",format=yuv420p,setsar=1[outv]";
   if(hasAudio(videoPath)){
-    ff(["-y","-i",videoPath,"-vf",vf,"-c:v","libx264","-pix_fmt","yuv420p",
-        "-c:a","aac","-ar","48000","-ac","2", outFile]);
+    ff(["-y","-i",videoPath,"-loop","1","-i",labelPng,"-filter_complex",vf,
+        "-map","[outv]","-map","0:a","-c:v","libx264","-pix_fmt","yuv420p",
+        "-c:a","aac","-ar","48000","-ac","2","-shortest", outFile]);
   }else{
-    ff(["-y","-i",videoPath,"-f","lavfi","-i","anullsrc=channel_layout=stereo:sample_rate=48000",
-        "-vf",vf,"-map","0:v","-map","1:a","-c:v","libx264","-pix_fmt","yuv420p",
-        "-c:a","aac","-shortest", outFile]);
+    ff(["-y","-i",videoPath,"-loop","1","-i",labelPng,
+        "-f","lavfi","-i","anullsrc=channel_layout=stereo:sample_rate=48000",
+        "-filter_complex",vf,"-map","[outv]","-map","2:a",
+        "-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-shortest", outFile]);
   }
 }
 
@@ -64,22 +71,22 @@ function normalizeVideo(videoPath, fps, outFile){
   const fps = cfg.fps || 30;
   const scale = cfg.scale || 2;
   const introDur = cfg.introDuration || 4;
-  const outroDur = cfg.outroDuration || 3;
+  const outroDur = cfg.outroDuration || 4;
   if(!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR,{recursive:true});
 
   const todo = cfg.soirees.filter(s => existingVideos(s).length > 0);
-  if(!todo.length){
-    console.log("Aucune soirée avec des vidéos existantes. Déposez vos clips dans videos/ et renseignez \"videos\": [\"videos/...\", \"videos/...\"] dans soirees.json.");
-    return;
-  }
+  if(!todo.length){ console.log("Aucune soirée avec des vidéos existantes (champ \"videos\")."); return; }
 
   const browser = await puppeteer.launch({ headless:"new", args:["--no-sandbox","--disable-setuid-sandbox","--hide-scrollbars"] });
   try{
     for(const s of todo){
       const data = Object.assign({}, cfg.common, s);
       const out = path.join(OUT_DIR, s.out || `reel_${s.day}.mp4`);
-      const vids = existingVideos(s);
-      console.log(`\n▶ ${path.basename(out)}  (intro + ${vids.length} vidéo(s) + outro)`);
+      // garde l'ordre des vidéos déclarées, en ne conservant que celles présentes
+      const decl = videoList(s);
+      const items = decl.map((v,i)=>({ file: path.join(ROOT,v), label: labelFor(s,i) }))
+                        .filter(it => fs.existsSync(it.file));
+      console.log(`\n▶ ${path.basename(out)}  (intro + ${items.length} vidéo(s) + outro)`);
 
       const page = await browser.newPage();
       await page.setViewport({ width:1080, height:1920, deviceScaleFactor:scale });
@@ -93,9 +100,15 @@ function normalizeVideo(videoPath, fps, outFile){
       const outroFrames = path.join(work,"outro"); fs.mkdirSync(outroFrames);
 
       console.log("  • intro…");
-      await renderCard(page, "intro", Math.round(fps*introDur), fps, introFrames);
+      await renderCardFrames(page, "intro", Math.round(fps*introDur), fps, introFrames);
       console.log("  • outro…");
-      await renderCard(page, "outro", Math.round(fps*outroDur), fps, outroFrames);
+      await renderCardFrames(page, "outro", Math.round(fps*outroDur), fps, outroFrames);
+
+      // un PNG de bandeau par vidéo
+      for(let i=0;i<items.length;i++){
+        items[i].png = path.join(work, `label_${i}.png`);
+        await renderLabelPng(page, items[i].label, items[i].png);
+      }
       await page.close();
 
       const introMp4 = path.join(work,"intro.mp4");
@@ -103,19 +116,16 @@ function normalizeVideo(videoPath, fps, outFile){
       framesToMp4Silent(introFrames, fps, introMp4);
       framesToMp4Silent(outroFrames, fps, outroMp4);
 
-      // Normalise chaque vidéo dans l'ordre
       const mids = [];
-      vids.forEach((v, i) => {
+      items.forEach((it, i) => {
         const mid = path.join(work, `mid_${i}.mp4`);
-        console.log(`  • normalisation vidéo ${i+1}/${vids.length} (${path.basename(v)})…`);
-        normalizeVideo(v, fps, mid);
+        console.log(`  • vidéo ${i+1}/${items.length} (${path.basename(it.file)}) — « ${it.label} »…`);
+        buildSegment(it.file, it.png, fps, mid);
         mids.push(mid);
       });
 
-      // Concaténation : intro + vidéos… + outro
       const list = path.join(work,"list.txt");
-      const lines = [introMp4, ...mids, outroMp4].map(f => `file '${f}'`).join("\n") + "\n";
-      fs.writeFileSync(list, lines);
+      fs.writeFileSync(list, [introMp4, ...mids, outroMp4].map(f=>`file '${f}'`).join("\n")+"\n");
       console.log("  • assemblage final…");
       ff(["-y","-f","concat","-safe","0","-i",list,
           "-c:v","libx264","-pix_fmt","yuv420p","-crf","18",
