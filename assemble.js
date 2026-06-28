@@ -61,20 +61,25 @@ function detectBars(videoPath){
   let h = bot - y; h -= h%2;
   return { y, h };
 }
+function musicOk(p){
+  try{ return !!p && fs.existsSync(p) && fs.statSync(p).size > 10000; }catch(e){ return false; }
+}
 function buildCard(tmpDir, fps, outFile, durSec, musicPath, musicStart, vol){
   const f = 0.4;
   const vfade = durSec && durSec>2*f
     ? ",fade=t=in:st=0:d="+f+",fade=t=out:st="+(durSec-f).toFixed(2)+":d="+f
     : "";
   const base = ["-y","-framerate",String(fps),"-i",path.join(tmpDir,"f%04d.png")];
-  if(musicPath && fs.existsSync(musicPath)){
+  if(musicOk(musicPath)){
     const fo = Math.max(0, durSec-0.5).toFixed(2);
     const af = "volume="+(vol||0.85)+",afade=t=in:st=0:d=0.6,afade=t=out:st="+fo+":d=0.5";
     ff([...base,"-ss",String(musicStart||0),"-t",String(durSec),"-i",musicPath,
+        "-map","0:v:0","-map","1:a:0",
         "-vf","scale=1080:1920:flags=lanczos"+vfade,"-r",String(fps),"-af",af,
         "-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-ar","48000","-ac","2",
         "-t",String(durSec), outFile]);
   }else{
+    if(musicPath) console.log("  ⚠ musique ignorée (absente/invalide) : "+musicPath);
     ff([...base,"-f","lavfi","-i","anullsrc=channel_layout=stereo:sample_rate=48000",
         "-vf","scale=1080:1920:flags=lanczos"+vfade,"-r",String(fps),
         "-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-t",String(durSec), outFile]);
