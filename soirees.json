@@ -6,6 +6,8 @@
   "scale": 2,
   "common": {
     "clipSeconds": 10,
+    "music": "music/electric_heartbeat.mp3",
+    "musicVolume": 0.85,
     "eyebrow": "Été 2026 · Terrasson-Lavilledieu",
     "t1": "Les Jardins",
     "hl": "en scène",

@@ -61,15 +61,24 @@ function detectBars(videoPath){
   let h = bot - y; h -= h%2;
   return { y, h };
 }
-function framesToMp4Silent(tmpDir, fps, outFile, durSec){
+function buildCard(tmpDir, fps, outFile, durSec, musicPath, musicStart, vol){
   const f = 0.4;
-  const fade = durSec && durSec>2*f
+  const vfade = durSec && durSec>2*f
     ? ",fade=t=in:st=0:d="+f+",fade=t=out:st="+(durSec-f).toFixed(2)+":d="+f
     : "";
-  ff(["-y","-framerate",String(fps),"-i",path.join(tmpDir,"f%04d.png"),
-      "-f","lavfi","-i","anullsrc=channel_layout=stereo:sample_rate=48000",
-      "-vf","scale=1080:1920:flags=lanczos"+fade,"-r",String(fps),
-      "-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-shortest", outFile]);
+  const base = ["-y","-framerate",String(fps),"-i",path.join(tmpDir,"f%04d.png")];
+  if(musicPath && fs.existsSync(musicPath)){
+    const fo = Math.max(0, durSec-0.5).toFixed(2);
+    const af = "volume="+(vol||0.85)+",afade=t=in:st=0:d=0.6,afade=t=out:st="+fo+":d=0.5";
+    ff([...base,"-ss",String(musicStart||0),"-t",String(durSec),"-i",musicPath,
+        "-vf","scale=1080:1920:flags=lanczos"+vfade,"-r",String(fps),"-af",af,
+        "-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-ar","48000","-ac","2",
+        "-t",String(durSec), outFile]);
+  }else{
+    ff([...base,"-f","lavfi","-i","anullsrc=channel_layout=stereo:sample_rate=48000",
+        "-vf","scale=1080:1920:flags=lanczos"+vfade,"-r",String(fps),
+        "-c:v","libx264","-pix_fmt","yuv420p","-c:a","aac","-t",String(durSec), outFile]);
+  }
 }
 // Vidéo -> 1080x1920 avec fond flou + nom du groupe incrusté en bas
 function buildSegment(videoPath, labelPng, fps, outFile, start, dur){
@@ -153,8 +162,13 @@ function buildSegment(videoPath, labelPng, fps, outFile, start, dur){
 
       const introMp4 = path.join(work,"intro.mp4");
       const outroMp4 = path.join(work,"outro.mp4");
-      framesToMp4Silent(introFrames, fps, introMp4, introDur);
-      framesToMp4Silent(outroFrames, fps, outroMp4, outroDur);
+      const musicPath = data.music ? path.join(ROOT, data.music) : null;
+      const musicVol  = data.musicVolume || 0.85;
+      const mIntroStart = (data.musicIntroStart != null) ? data.musicIntroStart : 0;
+      const mOutroStart = (data.musicOutroStart != null) ? data.musicOutroStart : introDur;
+      if(musicPath && !fs.existsSync(musicPath)) console.log("  ⚠ musique introuvable : "+musicPath);
+      buildCard(introFrames, fps, introMp4, introDur, musicPath, mIntroStart, musicVol);
+      buildCard(outroFrames, fps, outroMp4, outroDur, musicPath, mOutroStart, musicVol);
 
       const clipSeconds = data.clipSeconds || 10;        // durée utilisée par clip
       const starts = Array.isArray(s.starts) ? s.starts : [];
